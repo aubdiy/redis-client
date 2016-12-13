@@ -1,0 +1,33 @@
+#foreach ($methodBeen in $methodBeens)
+
+public ${methodBeen.returnType} ${methodBeen.name}(${methodBeen.parameterWithType}) {
+#if(${methodBeen.returnType}=='void')   ${methodBeen.name}(1#if(${methodBeen.parameterWithType.length()} > 0), ${methodBeen.parameterWithoutType}#end);
+#else
+    return ${methodBeen.name}(1#if(${methodBeen.parameterWithType.length()} > 0), ${methodBeen.parameterWithoutType}#end);
+#end
+}
+
+public ${methodBeen.returnType} ${methodBeen.name}(int retries#if(${methodBeen.parameterWithType.length()} > 0), ${methodBeen.parameterWithType}#end) {
+#if(${methodBeen.returnType}=='void')
+    for (int i = 0; i <= retries; ++i) {
+        try {
+            jedis.${methodBeen.name}(#if(${methodBeen.parameterWithType.length()} > 0)${methodBeen.parameterWithoutType}#end);
+        } catch (JedisConnectionException e) {
+            rebuild(jedis);
+            throwJCE(retries, i, e);
+        }
+    }
+#else
+    ${methodBeen.returnType} result = null;
+    for (int i = 0; i <= retries; ++i) {
+        try {
+            result = jedis.${methodBeen.name}(#if(${methodBeen.parameterWithType.length()} > 0)${methodBeen.parameterWithoutType}#end);
+        } catch (JedisConnectionException e) {
+            rebuild(jedis);
+            throwJCE(retries, i, e);
+        }
+    }
+return result;
+#end
+}
+#end
