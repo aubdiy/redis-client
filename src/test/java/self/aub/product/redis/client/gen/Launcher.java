@@ -35,8 +35,9 @@ public class Launcher {
         VelocityContext context = new VelocityContext();
         context.put("methodBeens", methodBeens);
 
-        Template template = getTemplate("method-jedis-pool.vm");
         //Template template = getTemplate("method-jedis.vm");
+        //Template template = getTemplate("method-jedis-pool.vm");
+        Template template = getTemplate("method-jedis-cluster.vm");
 
         StringWriter stringWriter = new StringWriter();
         template.merge(context, stringWriter);
