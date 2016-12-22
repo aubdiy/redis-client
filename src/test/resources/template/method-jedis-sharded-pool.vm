@@ -10,8 +10,8 @@ public ${methodBeen.returnType} ${methodBeen.name}(${methodBeen.parameterWithTyp
 public ${methodBeen.returnType} ${methodBeen.name}(int retries#if(${methodBeen.parameterWithType.length()} > 0), ${methodBeen.parameterWithType}#end) {
 #if(${methodBeen.returnType}=='void')
     for (int i = 0; i <= retries; ++i) {
-        try {
-            jedisCluster.${methodBeen.name}(#if(${methodBeen.parameterWithType.length()} > 0)${methodBeen.parameterWithoutType}#end);
+        try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+            jedis.${methodBeen.name}(#if(${methodBeen.parameterWithType.length()} > 0)${methodBeen.parameterWithoutType}#end);
         } catch (JedisConnectionException e) {
             throwJCE(retries, i, e);
         }
@@ -19,8 +19,8 @@ public ${methodBeen.returnType} ${methodBeen.name}(int retries#if(${methodBeen.p
 #else
     ${methodBeen.returnType} result = null;
     for (int i = 0; i <= retries; ++i) {
-        try {
-            result = jedisCluster.${methodBeen.name}(#if(${methodBeen.parameterWithType.length()} > 0)${methodBeen.parameterWithoutType}#end);
+        try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+            result = jedis.${methodBeen.name}(#if(${methodBeen.parameterWithType.length()} > 0)${methodBeen.parameterWithoutType}#end);
         } catch (JedisConnectionException e) {
             throwJCE(retries, i, e);
         }

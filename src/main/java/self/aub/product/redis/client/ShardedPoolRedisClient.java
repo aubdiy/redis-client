@@ -1,18 +1,16 @@
 package self.aub.product.redis.client;
 
-import redis.clients.jedis.BitOP;
 import redis.clients.jedis.BitPosParams;
 import redis.clients.jedis.Client;
 import redis.clients.jedis.GeoCoordinate;
 import redis.clients.jedis.GeoRadiusResponse;
 import redis.clients.jedis.GeoUnit;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisPubSub;
 import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
+import redis.clients.jedis.ShardedJedis;
+import redis.clients.jedis.ShardedJedisPool;
 import redis.clients.jedis.SortingParams;
 import redis.clients.jedis.Tuple;
-import redis.clients.jedis.ZParams;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.jedis.params.sortedset.ZAddParams;
@@ -23,14 +21,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Created by liujinxin on 2016/12/12.
- *
+ * Created by liujinxin on 2016/12/19.
  */
-public class ClusterRedisClient {
-    private JedisCluster jedisCluster;
+public class ShardedPoolRedisClient {
 
-    public ClusterRedisClient(JedisCluster jedisCluster) {
-        this.jedisCluster = jedisCluster;
+    private ShardedJedisPool shardedJedisPool;
+
+    public ShardedPoolRedisClient(ShardedJedisPool shardedJedisPool) {
+        this.shardedJedisPool = shardedJedisPool;
     }
 
     public String set(String key, String value) {
@@ -40,8 +38,8 @@ public class ClusterRedisClient {
     public String set(int retries, String key, String value) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.set(key, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.set(key, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -56,8 +54,8 @@ public class ClusterRedisClient {
     public String set(int retries, String key, String value, String nxxx, String expx, long time) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.set(key, value, nxxx, expx, time);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.set(key, value, nxxx, expx, time);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -72,24 +70,8 @@ public class ClusterRedisClient {
     public String get(int retries, String key) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.get(key);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long exists(String... keys) {
-        return exists(1, keys);
-    }
-
-    public Long exists(int retries, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.exists(keys);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.get(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -104,24 +86,8 @@ public class ClusterRedisClient {
     public Boolean exists(int retries, String key) {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.exists(key);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long del(String... keys) {
-        return del(1, keys);
-    }
-
-    public Long del(int retries, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.del(keys);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.exists(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -136,8 +102,8 @@ public class ClusterRedisClient {
     public Long del(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.del(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.del(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -152,40 +118,8 @@ public class ClusterRedisClient {
     public String type(int retries, String key) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.type(key);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String rename(String oldkey, String newkey) {
-        return rename(1, oldkey, newkey);
-    }
-
-    public String rename(int retries, String oldkey, String newkey) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.rename(oldkey, newkey);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long renamenx(String oldkey, String newkey) {
-        return renamenx(1, oldkey, newkey);
-    }
-
-    public Long renamenx(int retries, String oldkey, String newkey) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.renamenx(oldkey, newkey);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.type(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -200,8 +134,8 @@ public class ClusterRedisClient {
     public Long expire(int retries, String key, int seconds) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.expire(key, seconds);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.expire(key, seconds);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -216,8 +150,8 @@ public class ClusterRedisClient {
     public Long expireAt(int retries, String key, long unixTime) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.expireAt(key, unixTime);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.expireAt(key, unixTime);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -232,8 +166,8 @@ public class ClusterRedisClient {
     public Long ttl(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.ttl(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.ttl(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -248,8 +182,8 @@ public class ClusterRedisClient {
     public Long move(int retries, String key, int dbIndex) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.move(key, dbIndex);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.move(key, dbIndex);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -264,24 +198,8 @@ public class ClusterRedisClient {
     public String getSet(int retries, String key, String value) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.getSet(key, value);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public List<String> mget(String... keys) {
-        return mget(1, keys);
-    }
-
-    public List<String> mget(int retries, String... keys) {
-        List<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.mget(keys);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.getSet(key, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -296,8 +214,8 @@ public class ClusterRedisClient {
     public Long setnx(int retries, String key, String value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.setnx(key, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.setnx(key, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -312,40 +230,8 @@ public class ClusterRedisClient {
     public String setex(int retries, String key, int seconds, String value) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.setex(key, seconds, value);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String mset(String... keysvalues) {
-        return mset(1, keysvalues);
-    }
-
-    public String mset(int retries, String... keysvalues) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.mset(keysvalues);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long msetnx(String... keysvalues) {
-        return msetnx(1, keysvalues);
-    }
-
-    public Long msetnx(int retries, String... keysvalues) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.msetnx(keysvalues);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.setex(key, seconds, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -360,8 +246,8 @@ public class ClusterRedisClient {
     public Long decrBy(int retries, String key, long integer) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.decrBy(key, integer);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.decrBy(key, integer);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -376,8 +262,8 @@ public class ClusterRedisClient {
     public Long decr(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.decr(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.decr(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -392,8 +278,8 @@ public class ClusterRedisClient {
     public Long incrBy(int retries, String key, long integer) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.incrBy(key, integer);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.incrBy(key, integer);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -408,8 +294,8 @@ public class ClusterRedisClient {
     public Double incrByFloat(int retries, String key, double value) {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.incrByFloat(key, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.incrByFloat(key, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -424,8 +310,8 @@ public class ClusterRedisClient {
     public Long incr(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.incr(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.incr(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -440,8 +326,8 @@ public class ClusterRedisClient {
     public Long append(int retries, String key, String value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.append(key, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.append(key, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -456,8 +342,8 @@ public class ClusterRedisClient {
     public String substr(int retries, String key, int start, int end) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.substr(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.substr(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -472,8 +358,8 @@ public class ClusterRedisClient {
     public Long hset(int retries, String key, String field, String value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hset(key, field, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hset(key, field, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -488,8 +374,8 @@ public class ClusterRedisClient {
     public String hget(int retries, String key, String field) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hget(key, field);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hget(key, field);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -504,8 +390,8 @@ public class ClusterRedisClient {
     public Long hsetnx(int retries, String key, String field, String value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hsetnx(key, field, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hsetnx(key, field, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -520,8 +406,8 @@ public class ClusterRedisClient {
     public String hmset(int retries, String key, Map<String,String> hash) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hmset(key, hash);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hmset(key, hash);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -536,8 +422,8 @@ public class ClusterRedisClient {
     public List<String> hmget(int retries, String key, String... fields) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hmget(key, fields);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hmget(key, fields);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -552,8 +438,8 @@ public class ClusterRedisClient {
     public Long hincrBy(int retries, String key, String field, long value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hincrBy(key, field, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hincrBy(key, field, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -568,8 +454,8 @@ public class ClusterRedisClient {
     public Double hincrByFloat(int retries, String key, String field, double value) {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hincrByFloat(key, field, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hincrByFloat(key, field, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -584,8 +470,8 @@ public class ClusterRedisClient {
     public Boolean hexists(int retries, String key, String field) {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hexists(key, field);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hexists(key, field);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -600,8 +486,8 @@ public class ClusterRedisClient {
     public Long hdel(int retries, String key, String... fields) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hdel(key, fields);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hdel(key, fields);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -616,8 +502,8 @@ public class ClusterRedisClient {
     public Long hlen(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hlen(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hlen(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -632,8 +518,8 @@ public class ClusterRedisClient {
     public Set<String> hkeys(int retries, String key) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hkeys(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hkeys(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -648,8 +534,8 @@ public class ClusterRedisClient {
     public List<String> hvals(int retries, String key) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hvals(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hvals(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -664,8 +550,8 @@ public class ClusterRedisClient {
     public Map<String,String> hgetAll(int retries, String key) {
         Map<String,String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hgetAll(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hgetAll(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -680,8 +566,8 @@ public class ClusterRedisClient {
     public Long rpush(int retries, String key, String... strings) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.rpush(key, strings);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.rpush(key, strings);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -696,8 +582,8 @@ public class ClusterRedisClient {
     public Long lpush(int retries, String key, String... strings) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.lpush(key, strings);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.lpush(key, strings);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -712,8 +598,8 @@ public class ClusterRedisClient {
     public Long llen(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.llen(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.llen(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -728,8 +614,8 @@ public class ClusterRedisClient {
     public List<String> lrange(int retries, String key, long start, long end) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.lrange(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.lrange(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -744,8 +630,8 @@ public class ClusterRedisClient {
     public String ltrim(int retries, String key, long start, long end) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.ltrim(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.ltrim(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -760,8 +646,8 @@ public class ClusterRedisClient {
     public String lindex(int retries, String key, long index) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.lindex(key, index);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.lindex(key, index);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -776,8 +662,8 @@ public class ClusterRedisClient {
     public String lset(int retries, String key, long index, String value) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.lset(key, index, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.lset(key, index, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -792,8 +678,8 @@ public class ClusterRedisClient {
     public Long lrem(int retries, String key, long count, String value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.lrem(key, count, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.lrem(key, count, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -808,8 +694,8 @@ public class ClusterRedisClient {
     public String lpop(int retries, String key) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.lpop(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.lpop(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -824,24 +710,8 @@ public class ClusterRedisClient {
     public String rpop(int retries, String key) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.rpop(key);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String rpoplpush(String srckey, String dstkey) {
-        return rpoplpush(1, srckey, dstkey);
-    }
-
-    public String rpoplpush(int retries, String srckey, String dstkey) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.rpoplpush(srckey, dstkey);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.rpop(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -856,8 +726,8 @@ public class ClusterRedisClient {
     public Long sadd(int retries, String key, String... members) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sadd(key, members);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.sadd(key, members);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -872,8 +742,8 @@ public class ClusterRedisClient {
     public Set<String> smembers(int retries, String key) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.smembers(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.smembers(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -888,8 +758,8 @@ public class ClusterRedisClient {
     public Long srem(int retries, String key, String... members) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.srem(key, members);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.srem(key, members);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -904,8 +774,8 @@ public class ClusterRedisClient {
     public String spop(int retries, String key) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.spop(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.spop(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -920,24 +790,8 @@ public class ClusterRedisClient {
     public Set<String> spop(int retries, String key, long count) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.spop(key, count);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long smove(String srckey, String dstkey, String member) {
-        return smove(1, srckey, dstkey, member);
-    }
-
-    public Long smove(int retries, String srckey, String dstkey, String member) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.smove(srckey, dstkey, member);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.spop(key, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -952,8 +806,8 @@ public class ClusterRedisClient {
     public Long scard(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.scard(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.scard(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -968,104 +822,8 @@ public class ClusterRedisClient {
     public Boolean sismember(int retries, String key, String member) {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sismember(key, member);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Set<String> sinter(String... keys) {
-        return sinter(1, keys);
-    }
-
-    public Set<String> sinter(int retries, String... keys) {
-        Set<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sinter(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sinterstore(String dstkey, String... keys) {
-        return sinterstore(1, dstkey, keys);
-    }
-
-    public Long sinterstore(int retries, String dstkey, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sinterstore(dstkey, keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Set<String> sunion(String... keys) {
-        return sunion(1, keys);
-    }
-
-    public Set<String> sunion(int retries, String... keys) {
-        Set<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sunion(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sunionstore(String dstkey, String... keys) {
-        return sunionstore(1, dstkey, keys);
-    }
-
-    public Long sunionstore(int retries, String dstkey, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sunionstore(dstkey, keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Set<String> sdiff(String... keys) {
-        return sdiff(1, keys);
-    }
-
-    public Set<String> sdiff(int retries, String... keys) {
-        Set<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sdiff(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sdiffstore(String dstkey, String... keys) {
-        return sdiffstore(1, dstkey, keys);
-    }
-
-    public Long sdiffstore(int retries, String dstkey, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sdiffstore(dstkey, keys);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.sismember(key, member);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1080,8 +838,8 @@ public class ClusterRedisClient {
     public String srandmember(int retries, String key) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.srandmember(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.srandmember(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1096,8 +854,8 @@ public class ClusterRedisClient {
     public List<String> srandmember(int retries, String key, int count) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.srandmember(key, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.srandmember(key, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1112,8 +870,8 @@ public class ClusterRedisClient {
     public Long zadd(int retries, String key, double score, String member) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zadd(key, score, member);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zadd(key, score, member);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1128,8 +886,8 @@ public class ClusterRedisClient {
     public Long zadd(int retries, String key, double score, String member, ZAddParams params) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zadd(key, score, member, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zadd(key, score, member, params);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1144,8 +902,8 @@ public class ClusterRedisClient {
     public Long zadd(int retries, String key, Map<String,Double> scoreMembers) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zadd(key, scoreMembers);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zadd(key, scoreMembers);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1160,8 +918,8 @@ public class ClusterRedisClient {
     public Long zadd(int retries, String key, Map<String,Double> scoreMembers, ZAddParams params) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zadd(key, scoreMembers, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zadd(key, scoreMembers, params);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1176,8 +934,8 @@ public class ClusterRedisClient {
     public Set<String> zrange(int retries, String key, long start, long end) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrange(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrange(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1192,8 +950,8 @@ public class ClusterRedisClient {
     public Long zrem(int retries, String key, String... members) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrem(key, members);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrem(key, members);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1208,8 +966,8 @@ public class ClusterRedisClient {
     public Double zincrby(int retries, String key, double score, String member) {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zincrby(key, score, member);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zincrby(key, score, member);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1224,8 +982,8 @@ public class ClusterRedisClient {
     public Double zincrby(int retries, String key, double score, String member, ZIncrByParams params) {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zincrby(key, score, member, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zincrby(key, score, member, params);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1240,8 +998,8 @@ public class ClusterRedisClient {
     public Long zrank(int retries, String key, String member) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrank(key, member);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrank(key, member);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1256,8 +1014,8 @@ public class ClusterRedisClient {
     public Long zrevrank(int retries, String key, String member) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrank(key, member);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrank(key, member);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1272,8 +1030,8 @@ public class ClusterRedisClient {
     public Set<String> zrevrange(int retries, String key, long start, long end) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrange(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrange(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1288,8 +1046,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrangeWithScores(int retries, String key, long start, long end) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeWithScores(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeWithScores(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1304,8 +1062,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrevrangeWithScores(int retries, String key, long start, long end) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeWithScores(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeWithScores(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1320,8 +1078,8 @@ public class ClusterRedisClient {
     public Long zcard(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zcard(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zcard(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1336,8 +1094,8 @@ public class ClusterRedisClient {
     public Double zscore(int retries, String key, String member) {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zscore(key, member);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zscore(key, member);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1352,8 +1110,8 @@ public class ClusterRedisClient {
     public List<String> sort(int retries, String key) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sort(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.sort(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1368,73 +1126,8 @@ public class ClusterRedisClient {
     public List<String> sort(int retries, String key, SortingParams sortingParameters) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sort(key, sortingParameters);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public List<String> blpop(int timeout, String... keys) {
-        return blpop(1, timeout, keys);
-    }
-
-    public List<String> blpop(int retries, int timeout, String... keys) {
-        List<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.blpop(timeout, keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-
-    public Long sort(String key, SortingParams sortingParameters, String dstkey) {
-        return sort(1, key, sortingParameters, dstkey);
-    }
-
-    public Long sort(int retries, String key, SortingParams sortingParameters, String dstkey) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sort(key, sortingParameters, dstkey);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sort(String key, String dstkey) {
-        return sort(1, key, dstkey);
-    }
-
-    public Long sort(int retries, String key, String dstkey) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sort(key, dstkey);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public List<String> brpop(int timeout, String... keys) {
-        return brpop(1, timeout, keys);
-    }
-
-    public List<String> brpop(int retries, int timeout, String... keys) {
-        List<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.brpop(timeout, keys);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.sort(key, sortingParameters);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1449,8 +1142,8 @@ public class ClusterRedisClient {
     public Long zcount(int retries, String key, double min, double max) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zcount(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zcount(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1465,8 +1158,8 @@ public class ClusterRedisClient {
     public Long zcount(int retries, String key, String min, String max) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zcount(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zcount(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1481,8 +1174,8 @@ public class ClusterRedisClient {
     public Set<String> zrangeByScore(int retries, String key, double min, double max) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScore(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScore(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1497,8 +1190,8 @@ public class ClusterRedisClient {
     public Set<String> zrangeByScore(int retries, String key, String min, String max) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScore(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScore(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1513,8 +1206,8 @@ public class ClusterRedisClient {
     public Set<String> zrangeByScore(int retries, String key, double min, double max, int offset, int count) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScore(key, min, max, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScore(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1529,8 +1222,8 @@ public class ClusterRedisClient {
     public Set<String> zrangeByScore(int retries, String key, String min, String max, int offset, int count) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScore(key, min, max, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScore(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1545,8 +1238,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrangeByScoreWithScores(int retries, String key, double min, double max) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScoreWithScores(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1561,8 +1254,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrangeByScoreWithScores(int retries, String key, String min, String max) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScoreWithScores(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1577,8 +1270,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrangeByScoreWithScores(int retries, String key, double min, double max, int offset, int count) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScoreWithScores(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1593,8 +1286,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrangeByScoreWithScores(int retries, String key, String min, String max, int offset, int count) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByScoreWithScores(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1609,8 +1302,8 @@ public class ClusterRedisClient {
     public Set<String> zrevrangeByScore(int retries, String key, double max, double min) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScore(key, max, min);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScore(key, max, min);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1625,8 +1318,8 @@ public class ClusterRedisClient {
     public Set<String> zrevrangeByScore(int retries, String key, String max, String min) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScore(key, max, min);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScore(key, max, min);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1641,8 +1334,8 @@ public class ClusterRedisClient {
     public Set<String> zrevrangeByScore(int retries, String key, double max, double min, int offset, int count) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScore(key, max, min, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScore(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1657,8 +1350,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrevrangeByScoreWithScores(int retries, String key, double max, double min) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScoreWithScores(key, max, min);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1673,8 +1366,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrevrangeByScoreWithScores(int retries, String key, double max, double min, int offset, int count) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScoreWithScores(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1689,8 +1382,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrevrangeByScoreWithScores(int retries, String key, String max, String min, int offset, int count) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScoreWithScores(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1705,8 +1398,8 @@ public class ClusterRedisClient {
     public Set<String> zrevrangeByScore(int retries, String key, String max, String min, int offset, int count) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScore(key, max, min, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScore(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1721,8 +1414,8 @@ public class ClusterRedisClient {
     public Set<Tuple> zrevrangeByScoreWithScores(int retries, String key, String max, String min) {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByScoreWithScores(key, max, min);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1737,8 +1430,8 @@ public class ClusterRedisClient {
     public Long zremrangeByRank(int retries, String key, long start, long end) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zremrangeByRank(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zremrangeByRank(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1753,8 +1446,8 @@ public class ClusterRedisClient {
     public Long zremrangeByScore(int retries, String key, double start, double end) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zremrangeByScore(key, start, end);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zremrangeByScore(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1769,72 +1462,8 @@ public class ClusterRedisClient {
     public Long zremrangeByScore(int retries, String key, String start, String end) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zremrangeByScore(key, start, end);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zunionstore(String dstkey, String... sets) {
-        return zunionstore(1, dstkey, sets);
-    }
-
-    public Long zunionstore(int retries, String dstkey, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zunionstore(dstkey, sets);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zunionstore(String dstkey, ZParams params, String... sets) {
-        return zunionstore(1, dstkey, params, sets);
-    }
-
-    public Long zunionstore(int retries, String dstkey, ZParams params, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zunionstore(dstkey, params, sets);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zinterstore(String dstkey, String... sets) {
-        return zinterstore(1, dstkey, sets);
-    }
-
-    public Long zinterstore(int retries, String dstkey, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zinterstore(dstkey, sets);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zinterstore(String dstkey, ZParams params, String... sets) {
-        return zinterstore(1, dstkey, params, sets);
-    }
-
-    public Long zinterstore(int retries, String dstkey, ZParams params, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zinterstore(dstkey, params, sets);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zremrangeByScore(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1849,8 +1478,8 @@ public class ClusterRedisClient {
     public Long zlexcount(int retries, String key, String min, String max) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zlexcount(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zlexcount(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1865,8 +1494,8 @@ public class ClusterRedisClient {
     public Set<String> zrangeByLex(int retries, String key, String min, String max) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByLex(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByLex(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1881,8 +1510,8 @@ public class ClusterRedisClient {
     public Set<String> zrangeByLex(int retries, String key, String min, String max, int offset, int count) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrangeByLex(key, min, max, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrangeByLex(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1897,8 +1526,8 @@ public class ClusterRedisClient {
     public Set<String> zrevrangeByLex(int retries, String key, String max, String min) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByLex(key, max, min);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByLex(key, max, min);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1913,8 +1542,8 @@ public class ClusterRedisClient {
     public Set<String> zrevrangeByLex(int retries, String key, String max, String min, int offset, int count) {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zrevrangeByLex(key, max, min, offset, count);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zrevrangeByLex(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1929,8 +1558,8 @@ public class ClusterRedisClient {
     public Long zremrangeByLex(int retries, String key, String min, String max) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zremrangeByLex(key, min, max);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zremrangeByLex(key, min, max);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1945,8 +1574,8 @@ public class ClusterRedisClient {
     public Long strlen(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.strlen(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.strlen(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1961,8 +1590,8 @@ public class ClusterRedisClient {
     public Long lpushx(int retries, String key, String... string) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.lpushx(key, string);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.lpushx(key, string);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1977,8 +1606,8 @@ public class ClusterRedisClient {
     public Long persist(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.persist(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.persist(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -1993,8 +1622,8 @@ public class ClusterRedisClient {
     public Long rpushx(int retries, String key, String... string) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.rpushx(key, string);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.rpushx(key, string);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2009,8 +1638,8 @@ public class ClusterRedisClient {
     public String echo(int retries, String string) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.echo(string);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.echo(string);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2025,24 +1654,8 @@ public class ClusterRedisClient {
     public Long linsert(int retries, String key, Client.LIST_POSITION where, String pivot, String value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.linsert(key, where, pivot, value);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String brpoplpush(String source, String destination, int timeout) {
-        return brpoplpush(1, source, destination, timeout);
-    }
-
-    public String brpoplpush(int retries, String source, String destination, int timeout) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.brpoplpush(source, destination, timeout);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.linsert(key, where, pivot, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2057,8 +1670,8 @@ public class ClusterRedisClient {
     public Boolean setbit(int retries, String key, long offset, boolean value) {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.setbit(key, offset, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.setbit(key, offset, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2073,8 +1686,8 @@ public class ClusterRedisClient {
     public Boolean setbit(int retries, String key, long offset, String value) {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.setbit(key, offset, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.setbit(key, offset, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2089,8 +1702,8 @@ public class ClusterRedisClient {
     public Boolean getbit(int retries, String key, long offset) {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.getbit(key, offset);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.getbit(key, offset);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2105,8 +1718,8 @@ public class ClusterRedisClient {
     public Long setrange(int retries, String key, long offset, String value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.setrange(key, offset, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.setrange(key, offset, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2121,8 +1734,8 @@ public class ClusterRedisClient {
     public String getrange(int retries, String key, long startOffset, long endOffset) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.getrange(key, startOffset, endOffset);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.getrange(key, startOffset, endOffset);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2137,8 +1750,8 @@ public class ClusterRedisClient {
     public Long bitpos(int retries, String key, boolean value) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.bitpos(key, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.bitpos(key, value);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2153,116 +1766,8 @@ public class ClusterRedisClient {
     public Long bitpos(int retries, String key, boolean value, BitPosParams params) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.bitpos(key, value, params);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Object eval(String script, int keyCount, String... params) {
-        return eval(1, script, keyCount, params);
-    }
-
-    public Object eval(int retries, String script, int keyCount, String... params) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.eval(script, keyCount, params);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public void subscribe(JedisPubSub jedisPubSub, String... channels) {
-        subscribe(1, jedisPubSub, channels);
-    }
-
-    public void subscribe(int retries, JedisPubSub jedisPubSub, String... channels) {
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                jedisCluster.subscribe(jedisPubSub, channels);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-    }
-
-    public Long publish(String channel, String message) {
-        return publish(1, channel, message);
-    }
-
-    public Long publish(int retries, String channel, String message) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.publish(channel, message);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public void psubscribe(JedisPubSub jedisPubSub, String... patterns) {
-        psubscribe(1, jedisPubSub, patterns);
-    }
-
-    public void psubscribe(int retries, JedisPubSub jedisPubSub, String... patterns) {
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                jedisCluster.psubscribe(jedisPubSub, patterns);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-    }
-
-    public Object eval(String script, List<String> keys, List<String> args) {
-        return eval(1, script, keys, args);
-    }
-
-    public Object eval(int retries, String script, List<String> keys, List<String> args) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.eval(script, keys, args);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Object evalsha(String sha1, List<String> keys, List<String> args) {
-        return evalsha(1, sha1, keys, args);
-    }
-
-    public Object evalsha(int retries, String sha1, List<String> keys, List<String> args) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.evalsha(sha1, keys, args);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Object evalsha(String sha1, int keyCount, String... params) {
-        return evalsha(1, sha1, keyCount, params);
-    }
-
-    public Object evalsha(int retries, String sha1, int keyCount, String... params) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.evalsha(sha1, keyCount, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.bitpos(key, value, params);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2277,8 +1782,8 @@ public class ClusterRedisClient {
     public Long bitcount(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.bitcount(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.bitcount(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2293,24 +1798,8 @@ public class ClusterRedisClient {
     public Long bitcount(int retries, String key, long start, long end) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.bitcount(key, start, end);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long bitop(BitOP op, String destKey, String... srcKeys) {
-        return bitop(1, op, destKey, srcKeys);
-    }
-
-    public Long bitop(int retries, BitOP op, String destKey, String... srcKeys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.bitop(op, destKey, srcKeys);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.bitcount(key, start, end);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2325,8 +1814,8 @@ public class ClusterRedisClient {
     public Long pexpire(int retries, String key, long milliseconds) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pexpire(key, milliseconds);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.pexpire(key, milliseconds);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2341,8 +1830,8 @@ public class ClusterRedisClient {
     public Long pexpireAt(int retries, String key, long millisecondsTimestamp) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pexpireAt(key, millisecondsTimestamp);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.pexpireAt(key, millisecondsTimestamp);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2357,8 +1846,8 @@ public class ClusterRedisClient {
     public Long pttl(int retries, String key) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pttl(key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.pttl(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2373,8 +1862,24 @@ public class ClusterRedisClient {
     public String psetex(int retries, String key, long milliseconds, String value) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.psetex(key, milliseconds, value);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.psetex(key, milliseconds, value);
+            } catch (JedisConnectionException e) {
+                throwJCE(retries, i, e);
+            }
+        }
+        return result;
+    }
+
+    public String set(String key, String value, String nxxx) {
+        return set(1, key, value, nxxx);
+    }
+
+    public String set(int retries, String key, String value, String nxxx) {
+        String result = null;
+        for (int i = 0; i <= retries; ++i) {
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.set(key, value, nxxx);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2389,24 +1894,8 @@ public class ClusterRedisClient {
     public String set(int retries, String key, String value, String nxxx, String expx, int time) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.set(key, value, nxxx, expx, time);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public ScanResult<String> scan(String cursor, ScanParams params) {
-        return scan(1, cursor, params);
-    }
-
-    public ScanResult<String> scan(int retries, String cursor, ScanParams params) {
-        ScanResult<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.scan(cursor, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.set(key, value, nxxx, expx, time);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2421,8 +1910,8 @@ public class ClusterRedisClient {
     public ScanResult<Map.Entry<String,String>> hscan(int retries, String key, String cursor) {
         ScanResult<Map.Entry<String,String>> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hscan(key, cursor);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hscan(key, cursor);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2437,8 +1926,8 @@ public class ClusterRedisClient {
     public ScanResult<Map.Entry<String,String>> hscan(int retries, String key, String cursor, ScanParams params) {
         ScanResult<Map.Entry<String,String>> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.hscan(key, cursor, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.hscan(key, cursor, params);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2453,8 +1942,8 @@ public class ClusterRedisClient {
     public ScanResult<String> sscan(int retries, String key, String cursor) {
         ScanResult<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sscan(key, cursor);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.sscan(key, cursor);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2469,8 +1958,8 @@ public class ClusterRedisClient {
     public ScanResult<String> sscan(int retries, String key, String cursor, ScanParams params) {
         ScanResult<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sscan(key, cursor, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.sscan(key, cursor, params);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2485,8 +1974,8 @@ public class ClusterRedisClient {
     public ScanResult<Tuple> zscan(int retries, String key, String cursor) {
         ScanResult<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zscan(key, cursor);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zscan(key, cursor);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2501,8 +1990,8 @@ public class ClusterRedisClient {
     public ScanResult<Tuple> zscan(int retries, String key, String cursor, ScanParams params) {
         ScanResult<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zscan(key, cursor, params);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.zscan(key, cursor, params);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2517,8 +2006,8 @@ public class ClusterRedisClient {
     public Long pfadd(int retries, String key, String... elements) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pfadd(key, elements);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.pfadd(key, elements);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2533,40 +2022,8 @@ public class ClusterRedisClient {
     public long pfcount(int retries, String key) {
         long result = 0;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pfcount(key);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public long pfcount(String... keys) {
-        return pfcount(1, keys);
-    }
-
-    public long pfcount(int retries, String... keys) {
-        long result = 0;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pfcount(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String pfmerge(String destkey, String... sourcekeys) {
-        return pfmerge(1, destkey, sourcekeys);
-    }
-
-    public String pfmerge(int retries, String destkey, String... sourcekeys) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pfmerge(destkey, sourcekeys);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.pfcount(key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2581,8 +2038,8 @@ public class ClusterRedisClient {
     public List<String> blpop(int retries, int timeout, String key) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.blpop(timeout, key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.blpop(timeout, key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2597,8 +2054,8 @@ public class ClusterRedisClient {
     public List<String> brpop(int retries, int timeout, String key) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.brpop(timeout, key);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.brpop(timeout, key);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2613,8 +2070,8 @@ public class ClusterRedisClient {
     public Long geoadd(int retries, String key, double longitude, double latitude, String member) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.geoadd(key, longitude, latitude, member);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.geoadd(key, longitude, latitude, member);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2629,8 +2086,8 @@ public class ClusterRedisClient {
     public Long geoadd(int retries, String key, Map<String,GeoCoordinate> memberCoordinateMap) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.geoadd(key, memberCoordinateMap);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.geoadd(key, memberCoordinateMap);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2645,8 +2102,8 @@ public class ClusterRedisClient {
     public Double geodist(int retries, String key, String member1, String member2) {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.geodist(key, member1, member2);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.geodist(key, member1, member2);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2661,8 +2118,8 @@ public class ClusterRedisClient {
     public Double geodist(int retries, String key, String member1, String member2, GeoUnit unit) {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.geodist(key, member1, member2, unit);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.geodist(key, member1, member2, unit);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2677,8 +2134,8 @@ public class ClusterRedisClient {
     public List<String> geohash(int retries, String key, String... members) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.geohash(key, members);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.geohash(key, members);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2693,8 +2150,8 @@ public class ClusterRedisClient {
     public List<GeoCoordinate> geopos(int retries, String key, String... members) {
         List<GeoCoordinate> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.geopos(key, members);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.geopos(key, members);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2709,8 +2166,8 @@ public class ClusterRedisClient {
     public List<GeoRadiusResponse> georadius(int retries, String key, double longitude, double latitude, double radius, GeoUnit unit) {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.georadius(key, longitude, latitude, radius, unit);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.georadius(key, longitude, latitude, radius, unit);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2725,8 +2182,8 @@ public class ClusterRedisClient {
     public List<GeoRadiusResponse> georadius(int retries, String key, double longitude, double latitude, double radius, GeoUnit unit, GeoRadiusParam param) {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.georadius(key, longitude, latitude, radius, unit, param);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.georadius(key, longitude, latitude, radius, unit, param);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2741,8 +2198,8 @@ public class ClusterRedisClient {
     public List<GeoRadiusResponse> georadiusByMember(int retries, String key, String member, double radius, GeoUnit unit) {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.georadiusByMember(key, member, radius, unit);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.georadiusByMember(key, member, radius, unit);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2757,8 +2214,8 @@ public class ClusterRedisClient {
     public List<GeoRadiusResponse> georadiusByMember(int retries, String key, String member, double radius, GeoUnit unit, GeoRadiusParam param) {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.georadiusByMember(key, member, radius, unit, param);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.georadiusByMember(key, member, radius, unit, param);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }
@@ -2773,8 +2230,8 @@ public class ClusterRedisClient {
     public List<Long> bitfield(int retries, String key, String... arguments) {
         List<Long> result = null;
         for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.bitfield(key, arguments);
+            try (ShardedJedis jedis = shardedJedisPool.getResource()) {
+                result = jedis.bitfield(key, arguments);
             } catch (JedisConnectionException e) {
                 throwJCE(retries, i, e);
             }

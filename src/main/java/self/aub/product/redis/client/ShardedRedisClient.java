@@ -1,36 +1,45 @@
 package self.aub.product.redis.client;
 
-import redis.clients.jedis.BitOP;
 import redis.clients.jedis.BitPosParams;
 import redis.clients.jedis.Client;
 import redis.clients.jedis.GeoCoordinate;
 import redis.clients.jedis.GeoRadiusResponse;
 import redis.clients.jedis.GeoUnit;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisPubSub;
+import redis.clients.jedis.JedisShardInfo;
 import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
+import redis.clients.jedis.ShardedJedis;
 import redis.clients.jedis.SortingParams;
 import redis.clients.jedis.Tuple;
-import redis.clients.jedis.ZParams;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.jedis.params.sortedset.ZIncrByParams;
+import redis.clients.util.Hashing;
 
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Created by liujinxin on 2016/12/12.
- *
  */
-public class ClusterRedisClient {
-    private JedisCluster jedisCluster;
+public class ShardedRedisClient {
+    private ShardedJedis jedis;
+    private Hashing algo;
+    private Pattern keyTagPattern;
 
-    public ClusterRedisClient(JedisCluster jedisCluster) {
-        this.jedisCluster = jedisCluster;
+    public ShardedRedisClient(ShardedJedis jedis) {
+        this.jedis = jedis;
+    }
+
+    public ShardedRedisClient(ShardedJedis jedis, Hashing algo, Pattern keyTagPattern) {
+        this.jedis = jedis;
+        this.algo = algo;
+        this.keyTagPattern = keyTagPattern;
     }
 
     public String set(String key, String value) {
@@ -41,8 +50,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.set(key, value);
+                result = jedis.set(key, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -57,8 +67,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.set(key, value, nxxx, expx, time);
+                result = jedis.set(key, value, nxxx, expx, time);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -73,24 +84,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.get(key);
+                result = jedis.get(key);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long exists(String... keys) {
-        return exists(1, keys);
-    }
-
-    public Long exists(int retries, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.exists(keys);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -105,24 +101,9 @@ public class ClusterRedisClient {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.exists(key);
+                result = jedis.exists(key);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long del(String... keys) {
-        return del(1, keys);
-    }
-
-    public Long del(int retries, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.del(keys);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -137,8 +118,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.del(key);
+                result = jedis.del(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -153,40 +135,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.type(key);
+                result = jedis.type(key);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String rename(String oldkey, String newkey) {
-        return rename(1, oldkey, newkey);
-    }
-
-    public String rename(int retries, String oldkey, String newkey) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.rename(oldkey, newkey);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long renamenx(String oldkey, String newkey) {
-        return renamenx(1, oldkey, newkey);
-    }
-
-    public Long renamenx(int retries, String oldkey, String newkey) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.renamenx(oldkey, newkey);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -201,8 +152,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.expire(key, seconds);
+                result = jedis.expire(key, seconds);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -217,8 +169,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.expireAt(key, unixTime);
+                result = jedis.expireAt(key, unixTime);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -233,8 +186,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.ttl(key);
+                result = jedis.ttl(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -249,8 +203,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.move(key, dbIndex);
+                result = jedis.move(key, dbIndex);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -265,24 +220,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.getSet(key, value);
+                result = jedis.getSet(key, value);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public List<String> mget(String... keys) {
-        return mget(1, keys);
-    }
-
-    public List<String> mget(int retries, String... keys) {
-        List<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.mget(keys);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -297,8 +237,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.setnx(key, value);
+                result = jedis.setnx(key, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -313,40 +254,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.setex(key, seconds, value);
+                result = jedis.setex(key, seconds, value);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String mset(String... keysvalues) {
-        return mset(1, keysvalues);
-    }
-
-    public String mset(int retries, String... keysvalues) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.mset(keysvalues);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long msetnx(String... keysvalues) {
-        return msetnx(1, keysvalues);
-    }
-
-    public Long msetnx(int retries, String... keysvalues) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.msetnx(keysvalues);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -361,8 +271,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.decrBy(key, integer);
+                result = jedis.decrBy(key, integer);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -377,8 +288,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.decr(key);
+                result = jedis.decr(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -393,8 +305,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.incrBy(key, integer);
+                result = jedis.incrBy(key, integer);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -409,8 +322,9 @@ public class ClusterRedisClient {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.incrByFloat(key, value);
+                result = jedis.incrByFloat(key, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -425,8 +339,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.incr(key);
+                result = jedis.incr(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -441,8 +356,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.append(key, value);
+                result = jedis.append(key, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -457,8 +373,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.substr(key, start, end);
+                result = jedis.substr(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -473,8 +390,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hset(key, field, value);
+                result = jedis.hset(key, field, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -489,8 +407,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hget(key, field);
+                result = jedis.hget(key, field);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -505,24 +424,26 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hsetnx(key, field, value);
+                result = jedis.hsetnx(key, field, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public String hmset(String key, Map<String,String> hash) {
+    public String hmset(String key, Map<String, String> hash) {
         return hmset(1, key, hash);
     }
 
-    public String hmset(int retries, String key, Map<String,String> hash) {
+    public String hmset(int retries, String key, Map<String, String> hash) {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hmset(key, hash);
+                result = jedis.hmset(key, hash);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -537,8 +458,9 @@ public class ClusterRedisClient {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hmget(key, fields);
+                result = jedis.hmget(key, fields);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -553,8 +475,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hincrBy(key, field, value);
+                result = jedis.hincrBy(key, field, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -569,8 +492,9 @@ public class ClusterRedisClient {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hincrByFloat(key, field, value);
+                result = jedis.hincrByFloat(key, field, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -585,8 +509,9 @@ public class ClusterRedisClient {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hexists(key, field);
+                result = jedis.hexists(key, field);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -601,8 +526,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hdel(key, fields);
+                result = jedis.hdel(key, fields);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -617,8 +543,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hlen(key);
+                result = jedis.hlen(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -633,8 +560,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hkeys(key);
+                result = jedis.hkeys(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -649,24 +577,26 @@ public class ClusterRedisClient {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hvals(key);
+                result = jedis.hvals(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public Map<String,String> hgetAll(String key) {
+    public Map<String, String> hgetAll(String key) {
         return hgetAll(1, key);
     }
 
-    public Map<String,String> hgetAll(int retries, String key) {
-        Map<String,String> result = null;
+    public Map<String, String> hgetAll(int retries, String key) {
+        Map<String, String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hgetAll(key);
+                result = jedis.hgetAll(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -681,8 +611,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.rpush(key, strings);
+                result = jedis.rpush(key, strings);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -697,8 +628,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.lpush(key, strings);
+                result = jedis.lpush(key, strings);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -713,8 +645,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.llen(key);
+                result = jedis.llen(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -729,8 +662,9 @@ public class ClusterRedisClient {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.lrange(key, start, end);
+                result = jedis.lrange(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -745,8 +679,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.ltrim(key, start, end);
+                result = jedis.ltrim(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -761,8 +696,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.lindex(key, index);
+                result = jedis.lindex(key, index);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -777,8 +713,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.lset(key, index, value);
+                result = jedis.lset(key, index, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -793,8 +730,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.lrem(key, count, value);
+                result = jedis.lrem(key, count, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -809,8 +747,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.lpop(key);
+                result = jedis.lpop(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -825,24 +764,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.rpop(key);
+                result = jedis.rpop(key);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String rpoplpush(String srckey, String dstkey) {
-        return rpoplpush(1, srckey, dstkey);
-    }
-
-    public String rpoplpush(int retries, String srckey, String dstkey) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.rpoplpush(srckey, dstkey);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -857,8 +781,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.sadd(key, members);
+                result = jedis.sadd(key, members);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -873,8 +798,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.smembers(key);
+                result = jedis.smembers(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -889,8 +815,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.srem(key, members);
+                result = jedis.srem(key, members);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -905,8 +832,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.spop(key);
+                result = jedis.spop(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -921,24 +849,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.spop(key, count);
+                result = jedis.spop(key, count);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long smove(String srckey, String dstkey, String member) {
-        return smove(1, srckey, dstkey, member);
-    }
-
-    public Long smove(int retries, String srckey, String dstkey, String member) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.smove(srckey, dstkey, member);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -953,8 +866,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.scard(key);
+                result = jedis.scard(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -969,104 +883,9 @@ public class ClusterRedisClient {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.sismember(key, member);
+                result = jedis.sismember(key, member);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Set<String> sinter(String... keys) {
-        return sinter(1, keys);
-    }
-
-    public Set<String> sinter(int retries, String... keys) {
-        Set<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sinter(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sinterstore(String dstkey, String... keys) {
-        return sinterstore(1, dstkey, keys);
-    }
-
-    public Long sinterstore(int retries, String dstkey, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sinterstore(dstkey, keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Set<String> sunion(String... keys) {
-        return sunion(1, keys);
-    }
-
-    public Set<String> sunion(int retries, String... keys) {
-        Set<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sunion(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sunionstore(String dstkey, String... keys) {
-        return sunionstore(1, dstkey, keys);
-    }
-
-    public Long sunionstore(int retries, String dstkey, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sunionstore(dstkey, keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Set<String> sdiff(String... keys) {
-        return sdiff(1, keys);
-    }
-
-    public Set<String> sdiff(int retries, String... keys) {
-        Set<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sdiff(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sdiffstore(String dstkey, String... keys) {
-        return sdiffstore(1, dstkey, keys);
-    }
-
-    public Long sdiffstore(int retries, String dstkey, String... keys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sdiffstore(dstkey, keys);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1081,8 +900,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.srandmember(key);
+                result = jedis.srandmember(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1097,8 +917,9 @@ public class ClusterRedisClient {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.srandmember(key, count);
+                result = jedis.srandmember(key, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1113,8 +934,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zadd(key, score, member);
+                result = jedis.zadd(key, score, member);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1129,40 +951,43 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zadd(key, score, member, params);
+                result = jedis.zadd(key, score, member, params);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public Long zadd(String key, Map<String,Double> scoreMembers) {
+    public Long zadd(String key, Map<String, Double> scoreMembers) {
         return zadd(1, key, scoreMembers);
     }
 
-    public Long zadd(int retries, String key, Map<String,Double> scoreMembers) {
+    public Long zadd(int retries, String key, Map<String, Double> scoreMembers) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zadd(key, scoreMembers);
+                result = jedis.zadd(key, scoreMembers);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public Long zadd(String key, Map<String,Double> scoreMembers, ZAddParams params) {
+    public Long zadd(String key, Map<String, Double> scoreMembers, ZAddParams params) {
         return zadd(1, key, scoreMembers, params);
     }
 
-    public Long zadd(int retries, String key, Map<String,Double> scoreMembers, ZAddParams params) {
+    public Long zadd(int retries, String key, Map<String, Double> scoreMembers, ZAddParams params) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zadd(key, scoreMembers, params);
+                result = jedis.zadd(key, scoreMembers, params);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1177,8 +1002,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrange(key, start, end);
+                result = jedis.zrange(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1193,8 +1019,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrem(key, members);
+                result = jedis.zrem(key, members);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1209,8 +1036,9 @@ public class ClusterRedisClient {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zincrby(key, score, member);
+                result = jedis.zincrby(key, score, member);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1225,8 +1053,9 @@ public class ClusterRedisClient {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zincrby(key, score, member, params);
+                result = jedis.zincrby(key, score, member, params);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1241,8 +1070,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrank(key, member);
+                result = jedis.zrank(key, member);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1257,8 +1087,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrank(key, member);
+                result = jedis.zrevrank(key, member);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1273,8 +1104,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrange(key, start, end);
+                result = jedis.zrevrange(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1289,8 +1121,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeWithScores(key, start, end);
+                result = jedis.zrangeWithScores(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1305,8 +1138,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeWithScores(key, start, end);
+                result = jedis.zrevrangeWithScores(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1321,8 +1155,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zcard(key);
+                result = jedis.zcard(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1337,8 +1172,9 @@ public class ClusterRedisClient {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zscore(key, member);
+                result = jedis.zscore(key, member);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1353,8 +1189,9 @@ public class ClusterRedisClient {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.sort(key);
+                result = jedis.sort(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1369,73 +1206,9 @@ public class ClusterRedisClient {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.sort(key, sortingParameters);
+                result = jedis.sort(key, sortingParameters);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public List<String> blpop(int timeout, String... keys) {
-        return blpop(1, timeout, keys);
-    }
-
-    public List<String> blpop(int retries, int timeout, String... keys) {
-        List<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.blpop(timeout, keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-
-    public Long sort(String key, SortingParams sortingParameters, String dstkey) {
-        return sort(1, key, sortingParameters, dstkey);
-    }
-
-    public Long sort(int retries, String key, SortingParams sortingParameters, String dstkey) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sort(key, sortingParameters, dstkey);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long sort(String key, String dstkey) {
-        return sort(1, key, dstkey);
-    }
-
-    public Long sort(int retries, String key, String dstkey) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.sort(key, dstkey);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public List<String> brpop(int timeout, String... keys) {
-        return brpop(1, timeout, keys);
-    }
-
-    public List<String> brpop(int retries, int timeout, String... keys) {
-        List<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.brpop(timeout, keys);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1450,8 +1223,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zcount(key, min, max);
+                result = jedis.zcount(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1466,8 +1240,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zcount(key, min, max);
+                result = jedis.zcount(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1482,8 +1257,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScore(key, min, max);
+                result = jedis.zrangeByScore(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1498,8 +1274,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScore(key, min, max);
+                result = jedis.zrangeByScore(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1514,8 +1291,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScore(key, min, max, offset, count);
+                result = jedis.zrangeByScore(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1530,8 +1308,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScore(key, min, max, offset, count);
+                result = jedis.zrangeByScore(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1546,8 +1325,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max);
+                result = jedis.zrangeByScoreWithScores(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1562,8 +1342,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max);
+                result = jedis.zrangeByScoreWithScores(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1578,8 +1359,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max, offset, count);
+                result = jedis.zrangeByScoreWithScores(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1594,8 +1376,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByScoreWithScores(key, min, max, offset, count);
+                result = jedis.zrangeByScoreWithScores(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1610,8 +1393,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScore(key, max, min);
+                result = jedis.zrevrangeByScore(key, max, min);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1626,8 +1410,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScore(key, max, min);
+                result = jedis.zrevrangeByScore(key, max, min);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1642,8 +1427,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScore(key, max, min, offset, count);
+                result = jedis.zrevrangeByScore(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1658,8 +1444,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min);
+                result = jedis.zrevrangeByScoreWithScores(key, max, min);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1674,8 +1461,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min, offset, count);
+                result = jedis.zrevrangeByScoreWithScores(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1690,8 +1478,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min, offset, count);
+                result = jedis.zrevrangeByScoreWithScores(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1706,8 +1495,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScore(key, max, min, offset, count);
+                result = jedis.zrevrangeByScore(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1722,8 +1512,9 @@ public class ClusterRedisClient {
         Set<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByScoreWithScores(key, max, min);
+                result = jedis.zrevrangeByScoreWithScores(key, max, min);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1738,8 +1529,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zremrangeByRank(key, start, end);
+                result = jedis.zremrangeByRank(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1754,8 +1546,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zremrangeByScore(key, start, end);
+                result = jedis.zremrangeByScore(key, start, end);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1770,72 +1563,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zremrangeByScore(key, start, end);
+                result = jedis.zremrangeByScore(key, start, end);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zunionstore(String dstkey, String... sets) {
-        return zunionstore(1, dstkey, sets);
-    }
-
-    public Long zunionstore(int retries, String dstkey, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zunionstore(dstkey, sets);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zunionstore(String dstkey, ZParams params, String... sets) {
-        return zunionstore(1, dstkey, params, sets);
-    }
-
-    public Long zunionstore(int retries, String dstkey, ZParams params, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zunionstore(dstkey, params, sets);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zinterstore(String dstkey, String... sets) {
-        return zinterstore(1, dstkey, sets);
-    }
-
-    public Long zinterstore(int retries, String dstkey, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zinterstore(dstkey, sets);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long zinterstore(String dstkey, ZParams params, String... sets) {
-        return zinterstore(1, dstkey, params, sets);
-    }
-
-    public Long zinterstore(int retries, String dstkey, ZParams params, String... sets) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.zinterstore(dstkey, params, sets);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1850,8 +1580,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zlexcount(key, min, max);
+                result = jedis.zlexcount(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1866,8 +1597,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByLex(key, min, max);
+                result = jedis.zrangeByLex(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1882,8 +1614,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrangeByLex(key, min, max, offset, count);
+                result = jedis.zrangeByLex(key, min, max, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1898,8 +1631,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByLex(key, max, min);
+                result = jedis.zrevrangeByLex(key, max, min);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1914,8 +1648,9 @@ public class ClusterRedisClient {
         Set<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zrevrangeByLex(key, max, min, offset, count);
+                result = jedis.zrevrangeByLex(key, max, min, offset, count);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1930,8 +1665,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zremrangeByLex(key, min, max);
+                result = jedis.zremrangeByLex(key, min, max);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1946,8 +1682,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.strlen(key);
+                result = jedis.strlen(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1962,8 +1699,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.lpushx(key, string);
+                result = jedis.lpushx(key, string);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1978,8 +1716,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.persist(key);
+                result = jedis.persist(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -1994,8 +1733,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.rpushx(key, string);
+                result = jedis.rpushx(key, string);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2010,8 +1750,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.echo(string);
+                result = jedis.echo(string);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2026,24 +1767,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.linsert(key, where, pivot, value);
+                result = jedis.linsert(key, where, pivot, value);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String brpoplpush(String source, String destination, int timeout) {
-        return brpoplpush(1, source, destination, timeout);
-    }
-
-    public String brpoplpush(int retries, String source, String destination, int timeout) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.brpoplpush(source, destination, timeout);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2058,8 +1784,9 @@ public class ClusterRedisClient {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.setbit(key, offset, value);
+                result = jedis.setbit(key, offset, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2074,8 +1801,9 @@ public class ClusterRedisClient {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.setbit(key, offset, value);
+                result = jedis.setbit(key, offset, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2090,8 +1818,9 @@ public class ClusterRedisClient {
         Boolean result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.getbit(key, offset);
+                result = jedis.getbit(key, offset);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2106,8 +1835,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.setrange(key, offset, value);
+                result = jedis.setrange(key, offset, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2122,8 +1852,9 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.getrange(key, startOffset, endOffset);
+                result = jedis.getrange(key, startOffset, endOffset);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2138,8 +1869,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.bitpos(key, value);
+                result = jedis.bitpos(key, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2154,116 +1886,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.bitpos(key, value, params);
+                result = jedis.bitpos(key, value, params);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Object eval(String script, int keyCount, String... params) {
-        return eval(1, script, keyCount, params);
-    }
-
-    public Object eval(int retries, String script, int keyCount, String... params) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.eval(script, keyCount, params);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public void subscribe(JedisPubSub jedisPubSub, String... channels) {
-        subscribe(1, jedisPubSub, channels);
-    }
-
-    public void subscribe(int retries, JedisPubSub jedisPubSub, String... channels) {
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                jedisCluster.subscribe(jedisPubSub, channels);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-    }
-
-    public Long publish(String channel, String message) {
-        return publish(1, channel, message);
-    }
-
-    public Long publish(int retries, String channel, String message) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.publish(channel, message);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public void psubscribe(JedisPubSub jedisPubSub, String... patterns) {
-        psubscribe(1, jedisPubSub, patterns);
-    }
-
-    public void psubscribe(int retries, JedisPubSub jedisPubSub, String... patterns) {
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                jedisCluster.psubscribe(jedisPubSub, patterns);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-    }
-
-    public Object eval(String script, List<String> keys, List<String> args) {
-        return eval(1, script, keys, args);
-    }
-
-    public Object eval(int retries, String script, List<String> keys, List<String> args) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.eval(script, keys, args);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Object evalsha(String sha1, List<String> keys, List<String> args) {
-        return evalsha(1, sha1, keys, args);
-    }
-
-    public Object evalsha(int retries, String sha1, List<String> keys, List<String> args) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.evalsha(sha1, keys, args);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Object evalsha(String sha1, int keyCount, String... params) {
-        return evalsha(1, sha1, keyCount, params);
-    }
-
-    public Object evalsha(int retries, String sha1, int keyCount, String... params) {
-        Object result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.evalsha(sha1, keyCount, params);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2278,8 +1903,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.bitcount(key);
+                result = jedis.bitcount(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2294,24 +1920,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.bitcount(key, start, end);
+                result = jedis.bitcount(key, start, end);
             } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public Long bitop(BitOP op, String destKey, String... srcKeys) {
-        return bitop(1, op, destKey, srcKeys);
-    }
-
-    public Long bitop(int retries, BitOP op, String destKey, String... srcKeys) {
-        Long result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.bitop(op, destKey, srcKeys);
-            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2326,8 +1937,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.pexpire(key, milliseconds);
+                result = jedis.pexpire(key, milliseconds);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2342,8 +1954,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.pexpireAt(key, millisecondsTimestamp);
+                result = jedis.pexpireAt(key, millisecondsTimestamp);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2358,8 +1971,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.pttl(key);
+                result = jedis.pttl(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2374,8 +1988,26 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.psetex(key, milliseconds, value);
+                result = jedis.psetex(key, milliseconds, value);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
+                throwJCE(retries, i, e);
+            }
+        }
+        return result;
+    }
+
+    public String set(String key, String value, String nxxx) {
+        return set(1, key, value, nxxx);
+    }
+
+    public String set(int retries, String key, String value, String nxxx) {
+        String result = null;
+        for (int i = 0; i <= retries; ++i) {
+            try {
+                result = jedis.set(key, value, nxxx);
+            } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2390,56 +2022,43 @@ public class ClusterRedisClient {
         String result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.set(key, value, nxxx, expx, time);
+                result = jedis.set(key, value, nxxx, expx, time);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public ScanResult<String> scan(String cursor, ScanParams params) {
-        return scan(1, cursor, params);
-    }
-
-    public ScanResult<String> scan(int retries, String cursor, ScanParams params) {
-        ScanResult<String> result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.scan(cursor, params);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public ScanResult<Map.Entry<String,String>> hscan(String key, String cursor) {
+    public ScanResult<Map.Entry<String, String>> hscan(String key, String cursor) {
         return hscan(1, key, cursor);
     }
 
-    public ScanResult<Map.Entry<String,String>> hscan(int retries, String key, String cursor) {
-        ScanResult<Map.Entry<String,String>> result = null;
+    public ScanResult<Map.Entry<String, String>> hscan(int retries, String key, String cursor) {
+        ScanResult<Map.Entry<String, String>> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hscan(key, cursor);
+                result = jedis.hscan(key, cursor);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public ScanResult<Map.Entry<String,String>> hscan(String key, String cursor, ScanParams params) {
+    public ScanResult<Map.Entry<String, String>> hscan(String key, String cursor, ScanParams params) {
         return hscan(1, key, cursor, params);
     }
 
-    public ScanResult<Map.Entry<String,String>> hscan(int retries, String key, String cursor, ScanParams params) {
-        ScanResult<Map.Entry<String,String>> result = null;
+    public ScanResult<Map.Entry<String, String>> hscan(int retries, String key, String cursor, ScanParams params) {
+        ScanResult<Map.Entry<String, String>> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.hscan(key, cursor, params);
+                result = jedis.hscan(key, cursor, params);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2454,8 +2073,9 @@ public class ClusterRedisClient {
         ScanResult<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.sscan(key, cursor);
+                result = jedis.sscan(key, cursor);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2470,8 +2090,9 @@ public class ClusterRedisClient {
         ScanResult<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.sscan(key, cursor, params);
+                result = jedis.sscan(key, cursor, params);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2486,8 +2107,9 @@ public class ClusterRedisClient {
         ScanResult<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zscan(key, cursor);
+                result = jedis.zscan(key, cursor);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2502,13 +2124,16 @@ public class ClusterRedisClient {
         ScanResult<Tuple> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.zscan(key, cursor, params);
+                result = jedis.zscan(key, cursor, params);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
+
+
 
     public Long pfadd(String key, String... elements) {
         return pfadd(1, key, elements);
@@ -2518,8 +2143,9 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.pfadd(key, elements);
+                result = jedis.pfadd(key, elements);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2534,72 +2160,43 @@ public class ClusterRedisClient {
         long result = 0;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.pfcount(key);
+                result = jedis.pfcount(key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public long pfcount(String... keys) {
-        return pfcount(1, keys);
+    public List<String> blpopWithTimeout(int timeout, String key) {
+        return blpopWithTimeout(1, timeout, key);
     }
 
-    public long pfcount(int retries, String... keys) {
-        long result = 0;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pfcount(keys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public String pfmerge(String destkey, String... sourcekeys) {
-        return pfmerge(1, destkey, sourcekeys);
-    }
-
-    public String pfmerge(int retries, String destkey, String... sourcekeys) {
-        String result = null;
-        for (int i = 0; i <= retries; ++i) {
-            try {
-                result = jedisCluster.pfmerge(destkey, sourcekeys);
-            } catch (JedisConnectionException e) {
-                throwJCE(retries, i, e);
-            }
-        }
-        return result;
-    }
-
-    public List<String> blpop(int timeout, String key) {
-        return blpop(1, timeout, key);
-    }
-
-    public List<String> blpop(int retries, int timeout, String key) {
+    public List<String> blpopWithTimeout(int retries, int timeout, String key) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.blpop(timeout, key);
+                result = jedis.blpop(timeout, key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public List<String> brpop(int timeout, String key) {
-        return brpop(1, timeout, key);
+    public List<String> brpopWithTimeout(int timeout, String key) {
+        return brpopWithTimeout(1, timeout, key);
     }
 
-    public List<String> brpop(int retries, int timeout, String key) {
+    public List<String> brpopWithTimeout(int retries, int timeout, String key) {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.brpop(timeout, key);
+                result = jedis.brpop(timeout, key);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2614,24 +2211,26 @@ public class ClusterRedisClient {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.geoadd(key, longitude, latitude, member);
+                result = jedis.geoadd(key, longitude, latitude, member);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
 
-    public Long geoadd(String key, Map<String,GeoCoordinate> memberCoordinateMap) {
+    public Long geoadd(String key, Map<String, GeoCoordinate> memberCoordinateMap) {
         return geoadd(1, key, memberCoordinateMap);
     }
 
-    public Long geoadd(int retries, String key, Map<String,GeoCoordinate> memberCoordinateMap) {
+    public Long geoadd(int retries, String key, Map<String, GeoCoordinate> memberCoordinateMap) {
         Long result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.geoadd(key, memberCoordinateMap);
+                result = jedis.geoadd(key, memberCoordinateMap);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2646,8 +2245,9 @@ public class ClusterRedisClient {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.geodist(key, member1, member2);
+                result = jedis.geodist(key, member1, member2);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2662,8 +2262,9 @@ public class ClusterRedisClient {
         Double result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.geodist(key, member1, member2, unit);
+                result = jedis.geodist(key, member1, member2, unit);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2678,8 +2279,9 @@ public class ClusterRedisClient {
         List<String> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.geohash(key, members);
+                result = jedis.geohash(key, members);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2694,8 +2296,9 @@ public class ClusterRedisClient {
         List<GeoCoordinate> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.geopos(key, members);
+                result = jedis.geopos(key, members);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2710,8 +2313,9 @@ public class ClusterRedisClient {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.georadius(key, longitude, latitude, radius, unit);
+                result = jedis.georadius(key, longitude, latitude, radius, unit);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2726,8 +2330,9 @@ public class ClusterRedisClient {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.georadius(key, longitude, latitude, radius, unit, param);
+                result = jedis.georadius(key, longitude, latitude, radius, unit, param);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2742,13 +2347,15 @@ public class ClusterRedisClient {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.georadiusByMember(key, member, radius, unit);
+                result = jedis.georadiusByMember(key, member, radius, unit);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
     }
+
 
     public List<GeoRadiusResponse> georadiusByMember(String key, String member, double radius, GeoUnit unit, GeoRadiusParam param) {
         return georadiusByMember(1, key, member, radius, unit, param);
@@ -2758,8 +2365,9 @@ public class ClusterRedisClient {
         List<GeoRadiusResponse> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.georadiusByMember(key, member, radius, unit, param);
+                result = jedis.georadiusByMember(key, member, radius, unit, param);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
@@ -2774,12 +2382,27 @@ public class ClusterRedisClient {
         List<Long> result = null;
         for (int i = 0; i <= retries; ++i) {
             try {
-                result = jedisCluster.bitfield(key, arguments);
+                result = jedis.bitfield(key, arguments);
             } catch (JedisConnectionException e) {
+                rebuild(jedis);
                 throwJCE(retries, i, e);
             }
         }
         return result;
+    }
+
+    private void rebuild(ShardedJedis jedis) {
+        Collection<JedisShardInfo> shardInfoCollection = jedis.getAllShardInfo();
+        List<JedisShardInfo> shardInfoList = Arrays.asList(shardInfoCollection.toArray(new JedisShardInfo[shardInfoCollection.size()]));
+        if (algo == null && keyTagPattern == null) {
+            this.jedis = new ShardedJedis(shardInfoList);
+        } else if (algo != null && keyTagPattern == null) {
+            this.jedis = new ShardedJedis(shardInfoList, algo);
+        } else if (algo == null && keyTagPattern != null) {
+            this.jedis = new ShardedJedis(shardInfoList, keyTagPattern);
+        } else {
+            this.jedis = new ShardedJedis(shardInfoList, algo, keyTagPattern);
+        }
     }
 
     private void throwJCE(int retries, int i, JedisConnectionException e) {

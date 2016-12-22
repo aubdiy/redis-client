@@ -29,7 +29,8 @@ public class Launcher {
     public static void main(String[] args) {
         VelocityConfig.init();
 
-        String methodFilePath = "/Users/liujinxin/Workspace/GitSelf/redis-client/src/test/resources/redis-method.data";
+        //String methodFilePath = "/Users/liujinxin/Workspace/GitSelf/redis-client/src/test/resources/redis-method.data";
+        String methodFilePath = "/Users/liujinxin/Workspace/GitSelf/redis-client/src/test/resources/redis-method-sharded.data";
         MethodReader methodReader = new MethodReader(methodFilePath);
         List<MethodBean> methodBeens = methodReader.readMethod();
         VelocityContext context = new VelocityContext();
@@ -37,7 +38,8 @@ public class Launcher {
 
         //Template template = getTemplate("method-jedis.vm");
         //Template template = getTemplate("method-jedis-pool.vm");
-        Template template = getTemplate("method-jedis-cluster.vm");
+        //Template template = getTemplate("method-jedis-cluster.vm");
+        Template template = getTemplate("method-jedis-sharded-pool.vm");
 
         StringWriter stringWriter = new StringWriter();
         template.merge(context, stringWriter);
